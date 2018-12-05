@@ -1,0 +1,329 @@
+---
+title: "HW2 - 250620601"
+author: "Ravin Lathigra"
+date: "October 14, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(width=200)
+```
+
+```{r libraries, eval = TRUE, echo = FALSE, warning=FALSE,include=FALSE}
+
+library(corrplot)    #Visualize Correlation withii
+library(kableExtra)  #Style tables
+library(tidyverse)   #contains ggplot2,dplyr,tidyr, readr,purr,tibble,stringr,forcats
+                          #library(ggplot2)
+library(ggbiplot)    #Allows plotting PCA objects. 
+library(formatR)      ## 
+library(e1071)       #Functions for latent class analysis, Fourier transform, fuzzy clustering, support vector machines,bagged clustering, naive Baye
+library(VIM)         #Knn
+library(ggfortify)   #Add on to ggplot2 to allow for more plot types
+library(tsne)        #Dimension reduction classification
+library(Rtsne)
+library(caret)       #streamlined model development
+library(GGally)      #Pairwise scatter plot -- extenstion of ggplot2
+library(RColorBrewer) #Control colours of plots 
+library(scatterplot3d)
+```
+
+
+```{r data}
+
+
+set.seed(100)
+sub_index = sample(nrow(mtcars),20,replace=FALSE)
+mtcars2 = mtcars[sub_index, c(1,2,4)]
+
+knitr::kable(summary(mtcars2), caption = "Summary of mtcars2 Data") %>%
+  kable_styling() %>%
+  scroll_box(width = "100%", height = "600px")
+
+str(mtcars2)
+
+mtcars2 <- mtcars2 %>%
+  mutate(cyl = as.numeric(cyl))
+
+```
+
+##Question 1a
+```{r 1a, warning= FALSE}
+
+
+ggpairs(mtcars2[,c(2,3,1)],
+        aes(colour = factor(cyl)),
+        diag = list(continuous = wrap("densityDiag", alpha = 0.4)),
+        lower = list(continous = wrap("points", alpha = 0.4), combo = "dot"),
+        upper = list(continuous = "cor", combo = "box_no_facet"),
+        title = "Figure 1.a| Pairwise Plot - mtcars2",
+        legend = 1
+       )
+
+```
+
+
+\n 
+\n
+
+Figure 1.a above shows a ggpairs plot in which 3 comparisons can be visualized from the data.
+
+* Upper: Pairwise correlation in aggregate (all classes) and by cyl.
+
+\n
+
+* Diagonal: Smoothed density estimate using Gaussian kernal estimate.  While density comparisons may be appropriate for continuous data, for cyl, it may not be the most appropriate method to visualize distribution.
+
+\n
+
+* Lower: Pairwise scatterplots among parameters, split by cyl.  
+
+\n
+
+**Hp Vs. Cyl**
+
+From figure 1.a, it can be seen that there is a positive generally linear relationship between hp and cyl. It is worth noting that there apprears to be an outlier in the 8 cyl class.  This data point is from the maserati bora whose hp greatly exceeds the avg horsepower amongst cars with 8 cyl.  Correlation cannot be calculated within class as there is no standard deviation of cyl, but in aggregate there is a correlation of 0.812 which supports the claim that there is a positive relationship between hp and cyl.
+
+\n
+
+**Mpg Vs. Cyl**
+
+From figure 1.a, it can be seen that there is a negative generally linear relationship between mpg and cyl.  The most extreme outlier is for the toyota corolla whose mpg exceeds that of the average car with 4 cyl. Correlation cannot be calculated within class as there is no standard deviation of cyl, but in aggregate there is a correlation of -0.893 which supports the claim that there is a negative relationship between mpg and cyl.
+
+
+\n
+
+**Mpg Vs. Hp**
+
+From figure 1.a, it can be seen that there is a inverse relationship between between mpg and cyl. Unlike the previous relationships, there seems to be a more curved relationship perhaps indicating a decreasing worsening in mpg as hp increases. If the outlier is removed i.e maserati bora the relationship seems more linear.  This inverse relationship between mpg and hp is supported by a correlation of -0.762.
+
+\n
+
+##Question 1b
+
+```{r 1b}
+
+
+mpg_lm <- lm(mpg~., data = mtcars2)
+
+
+summary(mpg_lm)
+```
+
+
+
+\n
+
+Fitting a linear model to the mtcars data such that:
+
+$$Y_{i} = \beta_{0} +\beta_{cyl}x_{i1}+\beta_{hp}x_{i2}+\epsilon_{i} $$
+
+The percent of variation in fuel consumption that is explained by the model is 80.19%.  
+
+\n
+
+The estimated coefficients are:
+
+$$\beta_{0} =  39.009142$$
+$$\beta_{cyl} =  -2.845021$$
+$$\beta_{hp} =  -0.009647$$
+
+The coefficients suggest that hp and cyl are inversly related to mpg which we estimated in part a, and that hp doesn't contribute or contributes only a small amount to the predicted mpg.
+
+\n
+
+##Question 1c
+```{r 1c}
+
+ci_cyl <- confint(mpg_lm,level = 0.90)
+
+ci_cyl
+
+
+```
+
+
+A 90% confidence interval for:  $$\beta_{cyl}$$ is calculated by $$\hat{\beta_{cyl}} \pm  tstat * SE$$
+\n
+CI: [-3.97,-1.71]
+
+\n
+
+##Question 1d
+
+```{r 1d}
+
+new_data <- data.frame(id = c("A","B","C"),
+                       cyl = c(4,6,8),
+                       hp = c(90,150,210))
+
+
+predict_mpg <-  predict(mpg_lm,newdata = new_data, interval = "prediction", level = 0.90)
+
+predict_mpg
+
+
+```
+
+##Question 1e
+
+\n
+
+Given what we have already observed, the 90% prediction interval for Car C is [8.626,19.820], therefore it is very unlikely that the actual fuel efficieny for this car is 3 mpg.
+
+\n
+
+##Question 1f
+
+```{r 1f}
+
+
+mpg_null <- lm(mpg~1,data=mtcars2)
+
+mpg_anova <- anova(mpg_null, mpg_lm)
+
+
+
+Anova_tbl <- data.frame(Source = c("Regression","Error","Total"),
+          `Sum of Squares` = c(mpg_anova$`Sum of Sq`[2],
+                               mpg_anova$RSS[2],
+                               mpg_anova$RSS[1]),
+          Df = c(mpg_anova$Df[2],
+                 mpg_anova$Res.Df[2],
+                 mpg_anova$Res.Df[1]),
+          `Mean Squares` = c(mpg_anova$`Sum of Sq`[2]/mpg_anova$Df[2],
+                             mpg_anova$RSS[2]/mpg_anova$Res.Df[2],
+                             "N/A"),
+          `F` = c((mpg_anova$`Sum of Sq`[2]/mpg_anova$Df[2])/(mpg_anova$RSS[2]/mpg_anova$Res.Df[2]),"N/A","N/A")
+)
+
+Anova_tbl
+
+
+
+```
+\n
+
+##Question 1g
+
+```{r 1g}
+
+mpg_anova
+
+
+```
+
+
+Considering the following
+null hypthesis: $$ H_{o}: \beta_{cyl},\beta_{hp} = 0$$ and 
+althernative hypthesis: $$ H_{a}: \exists \ \  \beta_{cyl},\beta_{hp} \ne 0$$ 
+and 
+$$\alpha = 0.05$$
+
+Anova analysis shows that there are at least one predictor has a strong linear relationship with the response variable ,mpg, therfore we should reject the null hypothesis.  This is indicated by a p-value that is less that the significance level (0.05).
+
+\n
+
+##Question 1h
+```{r 1h}
+
+mpg_red  <- lm(mpg~cyl, data= mtcars2)
+
+anova(mpg_red,mpg_lm)
+
+```
+Considering the following
+null hypthesis: $$ H_{o}:\beta_{hp} = 0$$ and 
+althernative hypthesis: $$ H_{a}: \beta_{hp} \ne 0$$ 
+and 
+$$\alpha = 0.05$$
+
+
+Anova analysis shows that hp does not have strong linear relationship with the response variable ,mpg, therfore we fail to reject the null hypothesis.  This is indicated by a p-value that is greater that the significance level (0.05).
+
+
+##Question 1i
+
+```{r 1i}
+mpg_red_lm <- lm(mpg~ hp, data= mtcars2)
+anova(mpg_null,mpg_red_lm)
+```
+
+Considering the following, where hp is the only predictor considered,
+null hypthesis: $$ H_{o}: \beta_{hp} = 0$$ and 
+althernative hypthesis: $$ H_{a}:\beta_{hp} \ne 0$$ 
+and 
+$$\alpha = 0.05$$
+
+We find that our p-value is less than our significance level which suggest that there is a linear relationship between mpg and hp, therfore we fail to reject the null.
+
+
+
+\n
+
+
+##Question 1j
+
+
+Part i contradicted what we found in part h, which is caused by the information that is no longer being provided by the cyl predictor.  In the presence of cyl, hp offers no predictive power however without that information, hp is required to make predictions.
+
+\n
+
+##Question 1k
+
+```{r 1k}
+
+set.seed(2)
+sub_index = sample(nrow(mtcars),27,replace=FALSE)
+mtcars3 = mtcars[sub_index, c(1:4,10)]
+
+knitr::kable(summary(mtcars3), caption = "Summary of mtcars3 Data") %>%
+  kable_styling() %>%
+  scroll_box(width = "100%", height = "600px")
+
+str(mtcars3)
+
+
+
+mpg_lm_lrg <- lm(mpg~ cyl+disp+hp+gear, data= mtcars3)
+
+
+summary(mpg_lm_lrg)
+```
+
+\n
+
+Having large p-values (larger than significance level) does not imply that none of the predictors is lineraly related with the response variable.  It could be caused by highly correlated predictors which can be resolved by correcting for multicollinearity. Depending on the data, it could also indicate that a linear model is not appropriate, though testing for multicolinearity should be considered first.
+
+
+\n
+
+##Question 1l
+
+```{r 1l}
+mpg_null_2 <- lm(mpg~ cyl, data= mtcars3)
+
+anova(mpg_null_2,mpg_lm_lrg)
+
+summary(mpg_lm_lrg)
+```
+
+
+The p-value of 0.04159 is less than the significance level therefore we reject the null that disp, hp and gear are not lineraly related to the response.
+
+
+\n
+
+
+##Question 1m
+
+```{r 1m}
+mpg_null_3 <- lm(mpg~ hp +gear, data= mtcars3)
+
+anova(mpg_null_3,mpg_lm_lrg)
+
+summary(mpg_lm_lrg)
+```
+
+In this case our p value exceeds our significance level and we fail to reject our null that disp and cyl together did not improve our prediction.

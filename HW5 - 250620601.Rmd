@@ -1,0 +1,435 @@
+---
+title: "HW5 - 250620601"
+author: "Ravin Lathigra"
+date: "December 4, 2018"
+output:
+  pdf_document:
+    latex_engine: xelatex
+---
+<style>
+pre code, pre, code {
+  white-space: pre !important;
+  overflow-x: scroll !important;
+  word-break: keep-all !important;
+  word-wrap: initial !important;
+}
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(width=100)
+```
+
+---
+
+##R Packages & Libraries
+```{r, eval=TRUE, echo = TRUE, warning = FALSE, message=FALSE}
+library(corrplot)    #Visualize Correlation between variables
+library(kableExtra)  #Style tables
+library(tidyverse)   #contains ggplot2,dplyr,tidyr, readr,purr,tibble,stringr,forcats
+library(formatR)     #Improve readability of code
+library(e1071)       #Functions for latent class analysis, Fourier transform ect.
+library(VIM)         #Knn      
+library(caret)       #streamlined model development
+library(ElemStatLearn)
+library(nnet)
+library(rattle.data)
+library(pROC)
+
+```
+
+
+##Question 1
+
+Consider the following model:
+
+$$log(\frac{p}{1-p}) = \beta_{0} +\beta_{1}x_{1}+\beta_{2}x_{2}$$
+$$p = p(Y=1|x_{1},x_{2})$$
+
+###Part A
+
+**Goal:** Determine P(y=1|x1=1,x2=0.5)
+
+$$p(Y=1|x_{1},x_{2}) = \frac{1}{1+e^{-(\beta_{0} +\beta_{1}x_{1}+\beta_{2}x_{2})}}$$
+```{r q1A, eval = T, echo = F}
+
+b0 <- -2.7399
+b1 <- 3.0287
+b2 <- −1.2081
+x1 <- 1
+x2 <- 0.5
+
+q1a <- 1/(1+exp(-(b0+b1*x1+b2*x2)))
+
+q1a
+```
+
+Given b0,b1,b2 = {-2.7399,3.0287,−1.2081} respectively, the probability that Y equals class 1 when x1 & x2 equal 1 and 0.5 respectively is: **0.4218338**
+
+###Part B
+
+**Goal:** Test the following hypothesis:
+
+null hypthesis: $$ H_{o}: \beta_{2} = 0$$ and 
+althernative hypthesis: $$ H_{a}: \beta_{2} \ne 0$$ 
+and 
+$$\alpha = 0.05$$
+```{r q1B, eval = T, echo = F}
+
+b0 <- -2.7399
+b1 <- 3.0287
+b2 <- −1.2081
+x1 <- 1
+x2 <- 0.5
+b2_z <- 2.615
+
+p_z <- (1-pnorm(b2_z, mean = 0, sd = 1))*2
+
+q1B <- data.frame("B2",b2_z,p_z,ifelse(p_z<0.05,"Reject Null","Fail to Reject"))
+
+colnames(q1B) = c("Parameter","z-value","pr(>|z|)","Action")
+
+kable(q1B,caption = "Question 1 B - Significance of B2", 
+      align = rep("c", ncol(q1B))) %>%
+  kable_styling(position = "center",latex_options = "hold_position") 
+
+```
+
+
+Hypothesis testing shows that given the z-value of B2, the probability of observing a value more exteme than the z-value is **less than** the signifcance level therefore we **reject** the null hypothesis.
+
+###Part C
+
+**Goal:** Test the following hypothesis:
+
+null hypthesis: $$ H_{o}: \beta_{1}=\beta_{2} = 0$$ and 
+althernative hypthesis: $$ H_{a}: H_{0} \space is \space false$$ 
+and 
+$$\alpha = 0.05$$
+
+Steps:
+
+*Determine the D-Stat*
++ Since there are only 2 predictors + intercept, we do not need to fit a reduced model, determine the deviance and take the difference between that and the full model.  We can simply **compare the Null Deviance and Residual Deviance**.  
+
+$$D-stat = {Null Deviance} - {Residual Deviance}$$
+*Determine the degrees of freedom*
++ We are comparing the number of parameters in the Full and Reduced models.  In our case, we are comparing a model with 3 predictors and a model with 1 i.e a difference of 2.  
+
+*Determine Probability of Exceeding D-stat*
++ When comparing full and reduced models, we know that this will follow a chi-squared distribution with k degrees of freedom, where k is the difference in predictors. From this we can determine the probability of observing a value D more extreme than our D-Stat. 
+
+*Compare Probability to Significance Level*
++ If the probability of exceeding the D-Stat is greater than the significance level of 0.05 we fail to reject the null hypothesis, otherwise we reject the null.
+
+```{r q1C, eval = T, echo = F}
+
+Null_Deviance <- 110.216
+Resid_Deviance <-  56.436
+
+p <- 3
+q <- 1
+
+D_stat <- Null_Deviance-Resid_Deviance
+k = p-q
+
+p_d <- 1-pchisq(D_stat,k) # Reject H0
+
+q1C <- data.frame(D_stat,k,p_d,ifelse(p_d<0.05,"Reject Null","Fail to Reject"))
+
+colnames(q1C) = c("D Stat","Degrees of Freedom","pr(>D)","Action")
+
+kable(q1C,caption = "Question 1 C - Significance of Model Predictors", 
+      align = rep("c", ncol(q1C)))%>%
+  kable_styling(position = "center",latex_options = "hold_position") 
+
+```
+
+
+Hypothesis testing shows that given the D-Stat, the probability of observing a value more exteme than the D-Stat is **less than** the signifcance level therefore we **reject** the null hypothesis.  At least one of B1 or B2 is significant for the model.
+
+
+##Question 2
+
+###Part A
+
+
+```{r q2A, eval = T, echo = F}
+
+train_control <- trainControl(method="none", savePredictions = T)
+
+fit_glm <- glm(chd~., data = SAheart, family = "binomial")
+
+
+pred <- predict(fit_glm, newdata=SAheart,type = "response")
+
+cutoff <-  0.5
+
+pred_final <- data.frame(pred) %>%
+                mutate("Class" = ifelse(`pred` < cutoff,0,1 ))
+
+pred_cmatrix <- confusionMatrix(data=pred_final$Class, SAheart$chd)
+
+pred_cmatrix
+
+
+pred_summary<- data.frame(data.table(c(names(pred_cmatrix$byClass),"Accuracy"),c(pred_cmatrix$byClass,pred_cmatrix$overall["Accuracy"])))
+
+colnames(pred_summary) = c("Measure", "Result")
+
+pred_summary <- pred_summary %>%
+                  filter(Measure %in% c("Accuracy","Sensitivity", "Specificity","Precision")) %>%
+                  arrange(desc(Result))
+
+kable(pred_summary,
+      caption = "Question 2a - Logistic Regression | Cutoff = 0.5",
+      align = rep("c",ncol(pred_summary))) %>%
+  kable_styling(position = "center",latex_options = "hold_position") 
+
+
+
+```
+
+
+Using the SAheart dataset, we can model `chd` using all of the predictors in the dataset. 
+
+The SAheart provides insight into South African Hearth Disease. Within the data we can identify `chd` (Corinary Hear Disease) as the reposnse variable that is dependent on the other predictors in the model.  It is important to note that the reponse variable is a binary indivator whether an individual has corinary heart disease.  While model *accuracy* is important, it is important that the implication of the prediction is considered i.e false positive and false negatives cannot be interpreted as equally incorrect.
+
+The confusion matrix shoes how our model performed considering all predictors in the data.  Table 3 seprates the accuracy, sensitivity, specificity and precision of the model, though the results are consistent with those in the confusion matrix output.  
+
+We gather that out model has a high sensitivity i.e if the diagnosis is negative (no chd) the model correctly assigns the diagnosis 84.77% of the time.  oF all the negative classificaitons (no chd) made by the model the precision shows that it correctly classifies them 76.88% of the time.  What we gather from the model is we better model none chd cases then we do chd,  The specificity suggests that our prediciton only slightly outperforms a coin flip.
+
+This is a good example of how accuracy can be misleading.  While the model accuracy is high, it poorly models 1 class and more appropriately classfies the other.
+
+
+
+###Part B
+
+
+```{r q2B, eval = T, echo = F}
+
+n = nrow(SAheart)
+fit_back_bic <- step(fit_glm, direction = "backward", k=log(n),trace=0)
+
+fit_back_coefs <- data.frame(fit_back_bic$coefficients)
+colnames(fit_back_coefs) = "Coefficients"
+
+kable(fit_back_coefs,
+      caption = "Question 2b - Logistic Regression backward selection | Cutoff = 0.5",
+      align = rep("c",ncol(fit_back_coefs))) %>%
+  kable_styling(position = "center",latex_options = "hold_position") 
+
+
+```
+
+
+Using backward selection with BIC, the best subset of predictors were `Tobacco`, `LDL`, `FamhistPresent`, `typea` and `age`.
+
+Table 4 illustrate the coefficients of these predictors including the intercept.
+
+###Part C
+
+
+```{r q2C, eval = T, echo = F}
+
+
+fit_reduced <- fit_back_bic
+
+D_stat = deviance(fit_reduced) - deviance(fit_glm)
+
+D_stat
+
+p = 9
+q = 5
+
+k = p-q
+
+q2C <- data.frame(D_stat,k)
+                  
+colnames(q2C) = c("D Stat","Degrees of Freedom")
+
+kable(q2C,caption = "Question 2C - Significance of Model Predictors", 
+      align = rep("c", ncol(q2C))) %>%
+  kable_styling(position = "center",latex_options = "hold_position") 
+
+```
+
+
+Considering the full logistic regression and the BIC reduced model we can develop hypothesis to test.
+
+null hypthesis: $$ H_{o}: \beta_{sbp}=\beta_{adiposity}=\beta_{obesity} =\beta_{alcohol} = 0$$ and 
+althernative hypthesis: $$ H_{a}: \exists \ \  \beta_{sbp}=\beta_{adiposity}=\beta_{obesity} =\beta_{alcohol} \ne 0$$ 
+and 
+$$\alpha = {Significance \space level}$$
+
+Table 5 shows the D-Stat and Degrees of freedom used for the hypothesis testing.
+
+###Part D
+
+
+```{r q2D, eval = T, echo = F}
+
+p_d <- 1-pchisq(D_stat,k) # Reject H0
+
+q2D <- data.frame(D_stat,k,p_d,ifelse(p_d<0.05,"Reject Null","Fail to Reject"))
+                  
+colnames(q2D) = c("D Stat","Degrees of Freedom","pr(>D)","Action")
+
+kable(q2D,caption = "Question 2D - Significance of Model Predictors", 
+      align = rep("c", ncol(q2D))) %>%
+  kable_styling(position = "center",latex_options = "hold_position") 
+
+```
+
+
+Considering the a significance level of 5%, hypothesis testing suggests that we **fail to reject the null**.
+
+Table 6 shows the probability of exceeding the D-statistic and the corresponding decision regarding the null.
+
+
+
+##Question 3
+
+###Part A
+
+
+```{r q3A, eval = T, echo = F}
+
+ILPD <- read_csv("https://raw.githubusercontent.com/hgweon2/mda9159a/master/ILPD2.csv")
+
+ILPD <- ILPD %>%
+            mutate_if(sapply(., is.character), as.factor) %>%
+            mutate(Selector = factor(Selector))
+
+training_set <- ILPD[1:400,]
+test_set <- ILPD[401:579,]
+
+fit_glm <- glm(Selector~., data = training_set, family = "binomial")
+
+
+pred <- predict(fit_glm, newdata=test_set,type = "response")
+
+cutoff <-  0.5
+
+pred_final <- data.frame(pred) %>%
+                mutate("Class" = ifelse(`pred` < cutoff,1,2 ))
+
+pred_cmatrix <- confusionMatrix(data=pred_final$Class, test_set$Selector)
+
+pred_cmatrix
+
+
+pred_summary<- data.frame(data.table(c(names(pred_cmatrix$byClass),"Accuracy"),c(pred_cmatrix$byClass,pred_cmatrix$overall["Accuracy"])))
+
+colnames(pred_summary) = c("Measure", "Result")
+
+pred_summary <- pred_summary %>%
+                  filter(Measure %in% c("Accuracy","Sensitivity", "Specificity","Precision")) %>%
+                  arrange(desc(Result))
+
+kable(pred_summary,
+      caption = "Question 3a - Logistic Regression | Cutoff = 0.5",
+      align = rep("c",ncol(pred_summary)))%>%
+  kable_styling(position = "center",latex_options = "hold_position") 
+
+
+```
+
+
+The `ILPD` dataset provides insight into Indian Liver Patients. Within the data we can identify `Selector` - a class label used to divide into groups(liver patient or not)- as the reposnse variable that is dependent on the other predictors in the model.  It is important to note that the reponse variable is a binary indicator.  While model *accuracy* is important, it is important that the implication of the prediction is considered i.e false positive and false negatives cannot be interpreted as equally incorrect.
+
+The confusion matrix shoes how our model performed considering all predictors in the data.  Table 7 seprates the accuracy, sensitivity, specificity and precision of the model, though the results are consistent with those in the confusion matrix output.  
+
+We gather that out model has a high sensitivity i.e if `Selector` is 1 the model correctly assigns the diagnosis 89.68% of the time.  oF all the Selecter = 1 classificaitons made by the model the precision shows that it correctly classifies them 75.33% of the time.  What we gather from the model is we better model selector group 1 cases then we do group 2.  The specificity suggests that our prediciton performs significantly worse than a coin flip.
+
+This is a good example of how accuracy can be misleading.  While the model accuracy is moderate, it poorly models 1 class and more appropriately classfies the other.
+
+###Part B
+
+
+```{r q3B, eval = T, echo = F}
+
+cutoff <-  0.8
+
+pred_final <- data.frame(pred) %>%
+                mutate("Class" = ifelse(`pred` < cutoff,1,2 ))
+
+pred_cmatrix <- confusionMatrix(data=pred_final$Class, test_set$Selector)
+
+pred_cmatrix
+
+
+pred_summary<- data.frame(data.table(c(names(pred_cmatrix$byClass),"Accuracy"),c(pred_cmatrix$byClass,pred_cmatrix$overall["Accuracy"])))
+
+colnames(pred_summary) = c("Measure", "Result")
+
+pred_summary <- pred_summary %>%
+                  filter(Measure %in% c("Accuracy","Sensitivity", "Specificity","Precision")) %>%
+                  arrange(desc(Result))
+
+kable(pred_summary,
+      caption = "Question 3b - Logistic Regression | Cutoff = 0.8",
+      align = rep("c",ncol(pred_summary))) %>%
+  kable_styling(position = "center",latex_options = "hold_position") 
+
+
+```
+
+Table 8 shows how our classification changes after changing the cutoff to 0.8.  We notice that the sensitivity is near perfect but, we poorly represent group 2 cases. By increasing the cutoff, we put more restricition on what we consider to be "group 2".  In only 1 case did the P(y=2|.) exceed 0.8.
+
+###Part C
+
+As hinted at in Part B, to increase the sensitivity, we can increase the cutoff closer to 1.  This increases the constraint to make a group 2 classification.  If class 2 had been noted as the postiive class instead of class 1, the opposite would have been true, i.e decrease the cutoff.
+
+
+###Part D
+
+
+```{r q3D, eval = T, echo = F}
+
+
+roc_logistic <- roc(test_set$Selector ~ pred,col="dodgerblue",auc=TRUE)
+
+
+plot(roc_logistic, print.auc=TRUE,col = "dodgerblue",main = "Question 3D - ROC Curve")
+
+
+
+```
+
+AUC = 0.769
+
+###Part E
+
+
+```{r q3E, eval = T, echo = F}
+
+library(MASS)
+
+fit_lda = lda(Selector ~ ., data = training_set)
+pred_lda = predict(fit_lda,newdata=test_set)
+
+fit_nb = naiveBayes(as.factor(Selector) ~ ., data = training_set)
+prob_nb = predict(fit_nb,newdata=test_set,type="raw")
+
+roc_log = roc(test_set$Selector ~ pred, plot = TRUE,col="dodgerblue")
+roc_lda = roc(test_set$Selector ~ pred_lda$posterior[,2], plot = TRUE,col="orange",add=T)
+roc_nb = roc(test_set$Selector ~ prob_nb[,2], plot = TRUE,col="purple",add=T)
+
+
+
+legend("bottomright", c("log","LDA", "NB"), lwd = c(2,2),
+col = c("dodgerblue", "orange","purple"))
+
+auc_df <- data.frame(roc_log$auc,roc_lda$auc,roc_nb$auc)
+
+colnames(auc_df) = c("log", "LDA", "NB")
+rownames(auc_df) = "AUC"
+
+kable(auc_df, caption = "Question 3E - AUC", align = rep("c",ncol(auc_df)))  %>%
+  kable_styling(position = "center",latex_options = "hold_position")
+
+```
+
+Table 9 compares the AUC across the Logistic, Linear discriminant analysis and Naive Bayes models.  We gather that the logistic regression has the largest AUC, followed by LDA and lastly NB.

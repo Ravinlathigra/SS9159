@@ -1,0 +1,641 @@
+---
+title: "HW4 - 250620601"
+author: "Ravin Lathigra"
+date: "November 7, 2018"
+output:
+  pdf_document:
+    latex_engine: xelatex
+always_allow_html: yes
+
+---
+
+<style>
+pre code, pre, code {
+  white-space: pre !important;
+  overflow-x: scroll !important;
+  word-break: keep-all !important;
+  word-wrap: initial !important;
+}
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(width=100)
+```
+
+---
+
+##R Packages & Libraries
+```{r, eval=TRUE, echo = TRUE, warning = FALSE, message=FALSE}
+library(corrplot)    #Visualize Correlation between variables
+library(kableExtra)  #Style tables
+library(tidyverse)   #contains ggplot2,dplyr,tidyr, readr,purr,tibble,stringr,forcats
+library(formatR)     #Improve readability of code
+library(e1071)       #Functions for latent class analysis, Fourier transform ect.
+library(VIM)         #Knn
+library(ggfortify)   #Add on to ggplot2 to allow for more plot types
+library(Rtsne)       #Dimension reduction classification
+library(caret)       #streamlined model development
+library(RColorBrewer)#Control colours of visualizations 
+library(GGally)      #Contains ggpairs plots
+library(lmtest)      #Test for linear assumptions
+library(MASS)
+library(faraway)
+```
+
+
+##Question 1
+
+```{r q1_data, include = FALSE}
+
+q1_data <- read_csv("https://raw.githubusercontent.com/hgweon2/mda9159a/master/hw4-data.txt")
+
+```
+
+
+**One A - Variable Relationships**
+
+```{r 1a, eval = TRUE, echo = FALSE}
+pairwise_plot<- ggpairs(q1_data,progress=F,
+          diag = list(continuous = wrap("densityDiag", alpha = 0.4)),
+          lower = list(continuous = "cor", combo = "blank"),
+          upper = list(continuous = wrap("smooth_loess", alpha = 0.4)))+
+          ggtitle("Pairwise Plot | Model Variables")
+
+for(i in 1:pairwise_plot$nrow){
+  for(j in 1:pairwise_plot$ncol) {
+    pairwise_plot[i,j] <- pairwise_plot[i,j] + 
+         theme(legend.title=element_blank(),
+               plot.title = element_text(size=8))+
+         theme_bw()
+  }
+}
+
+
+
+
+print(pairwise_plot)
+
+
+```
+
+
+The plot *Pairwise Plot | Model Variables* shows between predictor relationships in 2 dimensions.  On the **diagonal** the estimated probability density functions are illustrated.  As a default in the `GGplot2 package`, a gaussian kernal is used for the estimation.  The **upper** portion of the plot shows the scatterplot with the labels on right side of the plot corresponding to the variable represented on the y axis and the upper label corresponding to the x axis.  A loess smoother with a 95% confidence interval is included to model any complex relationships that are difficult to capture with parametric techniques.  The ploy `y vs x1` shows that there is a strong positive correlation between the two variables though the curvature in the plot may suggest that a polynomial regression may be more appropriate.  The remaining plots show `y vs x2` and `x2 vs x1`.  While we observed that `x1` and `y` were highly correlatied we would expect these plots to apprear similar.  Both plots show that `x2` does not have an observable relationship with y or x1. This is further supported by the lower portion of the plot which shows the correlation.  
+
+
+
+**One B - Model Assumptions**
+
+```{r 1b, eval = TRUE, echo = FALSE}
+
+lm_1b <- lm(y~., data= q1_data)
+
+plot(lm_1b, which = c(1:2,4), col = "dodgerblue")
+
+# bptest
+# equal variance holds
+bptest(lm_1b) 
+
+# Shapiro test
+# Normal assumption HOLDS
+shapiro.test(resid(lm_1b))
+
+
+```
+
+The above plots display the following:
+
++ Resiudals vs Fitted Values
++ Normal qq plot
++ Cook's Distance 
+
+**Linear Model Appropriateness:**
+
+**Linearity** - Inspecting the plot "Residuals Vs Fitted" has a trend line that helps illustrate that there is a  parabolic relationship between fitted values and residuals. Furthermore, the residuals do not exhibit zero mean suggesting that a linear model may not be the most appropriate model and perhaps transformations should be considered. 
+
+**Equal Variance** - Inspecting the plot "Residuals Vs Fitted" we see that at any subset of the fitted values, there is a constant variance. 
+
+**Normality assumption** - Inspecting the plot "Normal Q-Q" we that the standardized residuals moderately correspond to the theoretical quantiles of a normal distribution.  To properly assess if the normality assumption is violated the Shapiro test will be carried out.  Additionally, the plot identifies 3 points that have the largest residuals.
+
+**Points of Interest** - Also included is a plot of Cook's distance which is a good indicator of point that may have high influence or require further investigation.  
+
+
+**BP Test**:  p-value >> 5% significance level this suggests that the equal variance assumptions holds for this model.
+
+
+**Shapiro Test**:  p-value < 5% significance level this suggests that the normality assumption doesn't hold for this model.  
+
+
+**One C - Influential Points**
+
+```{r 1c, eval = TRUE, echo = FALSE}
+
+q1_data <-  q1_data %>% 
+              mutate(`Residual`= resid(lm_1b), `Cooks Dist` = cooks.distance(lm_1b))
+
+high_cooks <- data.frame(which(q1_data$`Cooks Dist` >4/nrow(q1_data)))
+
+colnames(high_cooks) = "Index"
+
+kable(high_cooks,
+      align = rep("c", ncol(high_cooks)),
+      caption = "Influential Observations") %>%
+      kable_styling()
+
+
+```
+
+The table **Table 1.0: Influential Observations** shows that there are 14 observations whose cooks distance suggest that they are influential points.
+
+
+**One D - Outliers**
+
+```{r 1d, eval = TRUE, echo = FALSE}
+
+q1_data <-  q1_data %>% 
+              mutate(`Standard Resid` = rstandard(lm_1b)) 
+
+
+
+outliers <- data.frame(which(q1_data$`Cooks Dist` >4/nrow(q1_data) & q1_data$`Standard Resid`>2))
+
+colnames(outliers) = "Index"
+
+kable(outliers,
+      align = rep("c", ncol(outliers)),
+      caption = "Table 1.0: Influential Observations with large residuals") %>%
+      kable_styling()
+
+
+```
+
+
+The table **Influential Observations with large residuals** shows that there are 5 observations whose cooks distance suggest that they are influential points with large residuals.
+
+
+**One E - Remove Influential Points**
+
+```{r 1e, eval = TRUE, echo = FALSE}
+
+q1_data_rm <- q1_data %>%
+                filter(`Cooks Dist` <=4/nrow(q1_data)) %>%
+               dplyr::select(y,x1,x2)
+
+
+lm_1e <- lm(y~., data= q1_data_rm)
+
+plot(lm_1e, which = c(1:2,4), col = "dodgerblue")
+
+# bptest
+# equal variance holds
+bptest(lm_1e) 
+
+# Shapiro test
+# Normal assumption HOLDS
+shapiro.test(resid(lm_1e))
+
+
+
+```
+
+The above plots display the following:
+
++ Resiudals vs Fitted Values
++ Normal qq plot
++ Cook's Distance 
+
+**Linear Model Appropriateness:**
+
+**Linearity** - Inspecting the plot "Residuals Vs Fitted" has a trend line that helps illustrate that there is a parabolic relationship between fitted values and residuals. Furthermore, the residuals do not exhibit zero mean suggesting that a linear model may not be the most appropriate model and perhaps transformations should be considered. 
+
+**Equal Variance** - Inspecting the plot "Residuals Vs Fitted" we see that at any subset of the fitted values, there is a constant variance. 
+
+**Normality assumption** - Inspecting the plot "Normal Q-Q" we that the standardized residuals moderately correspond to the theoretical quantiles of a normal distribution.  To properly assess if the normality assumption is violated the Shapiro test will be carried out.  Additionally, the plot identifies 3 points that have the largest residuals.
+
+**Points of Interest** - Also included is a plot of Cook's distance which is a good indicator of point that may have high influence or require further investigation.  
+
+
+**BP Test**:  p-value >> 5% significance level this suggests that the equal variance assumptions holds for this model.
+
+
+**Shapiro Test**:  p-value < 5% significance level this suggests that the normality assumption doesn't hold for this model.  
+
+Therefore, removing influential points **did not** correct the model assumptions.
+
+
+**One F - Boxcox Transformation**
+
+```{r 1f, eval = TRUE, echo = FALSE}
+
+MASS::boxcox(lm_1e, lambda = seq(0,1, by =  0.05))
+
+lambda = 0.6
+
+lm_1f <- lm(((y^(lambda)-1)/(lambda))~., data= q1_data_rm)
+
+plot(lm_1f, which = c(1:2,4), col = "dodgerblue")
+
+# bptest
+# equal variance holds
+bptest(lm_1f) 
+
+# Shapiro test
+# Normal assumption HOLDS
+shapiro.test(resid(lm_1f))
+
+
+
+```
+
+The above plots display the following:
+
++ Resiudals vs Fitted Values
++ Normal qq plot
++ Cook's Distance 
+
+**Linear Model Appropriateness:**
+
+**Linearity** - Using a transformed response variable (lambda = 0.6) removes the parabolic trend of the fitted values and residuals, but there still seems to be areas where the mean residual is non zero.
+
+**Equal Variance** - Inspecting the plot "Residuals Vs Fitted" we see that there is evidence of non constant variance particularly decreasing as we move left to right on the plot.
+
+**Normality assumption** - Inspecting the plot "Normal Q-Q" we that the standardized residuals moderately correspond to the theoretical quantiles of a normal distribution.  To properly assess if the normality assumption is violated the Shapiro test will be carried out.  Additionally, the plot identifies 3 points that have the largest residuals.
+
+**Points of Interest** - Also included is a plot of Cook's distance which is a good indicator of point that may have high influence or require further investigation.  
+
+
+**BP Test**:  p-value < 5% significance level this suggests that the equal variance assumptions is violated for this model.
+
+
+**Shapiro Test**:  p-value < 5% significance level this suggests that the normality assumption doesn't hold for this model.  
+
+Therefore, applying a boxcox transformation with lambda of 0.6 **did not** correct the model assumptions.
+
+
+
+**One G - Quadratic Model**
+
+```{r 1g, eval = TRUE, echo = FALSE}
+lm_1g <- lm(y ~ x1 + x2 +I(x1^2)+ I(x2^2), data = q1_data)
+
+plot(lm_1g, which = c(1:2,4), col = "dodgerblue")
+
+# bptest
+# equal variance holds
+bptest(lm_1g) 
+
+# Shapiro test
+# Normal assumption HOLDS
+shapiro.test(resid(lm_1g))
+
+
+# Model B
+summary(lm_1b)
+
+# Model f
+summary(lm_1f)
+
+# Model g
+summary(lm_1g)
+
+
+
+
+
+```
+
+The above plots display the following:
+
++ Resiudals vs Fitted Values
++ Normal qq plot
++ Cook's Distance 
+
+**Linear Model Appropriateness:**
+
+**Linearity** - Using a quadratic model, the "Residuals Vs Fitted" plot suggests that the linearity assumption holds, though there are a few regions where the mean of residuals is not zero, but is close to zero.
+
+**Equal Variance** - Inspecting the plot "Residuals Vs Fitted" we see that there is generally constant variance.
+
+**Normality assumption** - Inspecting the plot "Normal Q-Q" we that the standardized residuals closely correspond to the theoretical quantiles of a normal distribution.  
+
+**Points of Interest** - Also included is a plot of Cook's distance which is a good indicator of point that may have high influence or require further investigation.  
+
+
+**BP Test**:  p-value > 5% significance level this suggests that the equal variance assumptions holds for this model.
+
+
+**Shapiro Test**:  p-value > 5% significance level this suggests that the normality assumption holds for this model.  
+
+Fitting a polynomial model to the data corrects the model assumptions and even comparing adjusted  R-squared values - despite the other models not meeting linearity assumptions -  suggest that **this model is more appropriate than those of B and F**.
+
+
+**One H - Cubic Model**
+
+```{r 1h, eval = TRUE, echo = FALSE}
+lm_1h <- lm(y ~ x1 + x2 +I(x1^2)+ I(x2^2)+I(x1^3)+I(x2^3), data = q1_data)
+
+plot(lm_1h, which = c(1:2,4), col = "dodgerblue")
+# bptest
+# equal variance holds
+bptest(lm_1h) 
+
+# Shapiro test
+# Normal assumption HOLDS
+shapiro.test(resid(lm_1h))
+
+# Model g
+summary(lm_1g)
+
+# Model h
+summary(lm_1h)
+
+
+
+
+
+```
+
+The above plots display the following:
+
++ Resiudals vs Fitted Values
++ Normal qq plot
++ Cook's Distance 
+
+**Linear Model Appropriateness:**
+
+**Linearity** - Using a cubic model, the "Residuals Vs Fitted" plot suggests that the linearity assumption holds, though there are a few regions where the mean of residuals is not zero, but is close to zero.
+
+**Equal Variance** - Inspecting the plot "Residuals Vs Fitted" we see that there is generally constant variance.
+
+
+**Normality assumption** - Inspecting the plot "Normal Q-Q" we that the standardized residuals closely correspond to the theoretical quantiles of a normal distribution.  
+
+**Points of Interest** - Also included is a plot of Cook's distance which is a good indicator of point that may have high influence or require further investigation.  
+
+
+**BP Test**:  p-value > 5% significance level this suggests that the equal variance assumptions holds for this model.
+
+
+**Shapiro Test**:  p-value > 5% significance level this suggests that the normality assumption holds for this model.  
+
+Though linearity assumptions hold for both the quadratic and cubic models, there is some evidence that suggests that the quadratic model is more appropriate.  Inspecting the adjusted R-squared model, to account for the difference in number of predictors between the two modes, there is almost no difference between the two models.  To avoid potential for overfitting the data, it should be preferred to use the model with few predictors i.e quadratic.
+
+
+##Question 2
+
+**Two A - Analysis of Collinearity**
+
+
+```{r 2a, eval = TRUE, echo = FALSE}
+
+q2_data <- mtcars %>%
+              dplyr::select(mpg,cyl,disp,hp,wt,drat)
+
+model_a <- lm(mpg ~ cyl + disp + hp + wt + drat, data = q2_data)
+
+q2_correlation <- cor(q2_data)
+
+corrplot(q2_correlation,mar=c(0,0,2,0), method = "square", type= "lower",diag = FALSE, tl.cex = .5, order = "hclust",tl.srt=45, addCoef.col = "black",title = "Between Variable correlation")
+
+vif(model_a)
+
+```
+
+
+Using a subset of the Mtcars dataset, we would like to assess the data to see if there is any collinearity that may influence our model.  A preliminary visualization can be done with a correlogram of the variables.  The correlogram **Between predictor correlation** shows that there is high correlation among the variables.  We can look further into this by inspecting the VIF of the various predictors. Calculating VIF for the predictors shows that `cyl`, `disp` and `wt` have VIF values greater than 5 suggesting that collinearity does exist, the variable with the highest being `disp`.
+
+
+**Two B - VIF Part I**
+
+```{r 2b, eval = TRUE, echo = FALSE}
+
+model_b <- lm(mpg ~ cyl + hp + wt + drat, data = q2_data)
+
+vif(model_b)
+
+vif_cyl = 1/(1-summary(lm(cyl~ hp + drat+ wt, data = mtcars))$r.squared)
+vif_hp = 1/(1-summary(lm(hp~ cyl + drat+ wt, data = mtcars))$r.squared)
+vif_wt = 1/(1-summary(lm(wt~ hp + drat+ cyl, data = mtcars))$r.squared)
+vif_drat = 1/(1-summary(lm(drat~ hp + cyl + wt, data = mtcars))$r.squared)
+
+
+VIF_matrix <- data.frame(c(vif_cyl,vif_hp,vif_wt,vif_drat))
+
+colnames(VIF_matrix) = "VIF"
+rownames(VIF_matrix) = c("cyl","hp","wt","drat")
+
+
+kable(VIF_matrix,
+      align = "c",
+      caption = "VIF by variable") %>%
+      kable_styling(position = "center") %>%
+      row_spec(1, bold = "T", background = "#F7FBFF")
+
+```
+
+Without using built-in R functions, VIF is calculated using the following steps:
+
+1. Model variable of interest by the other model predictors
+2. Determine the R-squared values
+3. $$VIF = \frac{1}{1-R^2}$$
+4. Repeat for all remaining variables
+
+The table **Table 3: VIF by variable** shows the VIF by predictor after `dist` was removed.  Highlighted in `light blue` is `cyl` which is indicitave of a VIF greater than 5.  This suggests that collinearity still exists.
+
+**Two C - VIF Part II**
+
+```{r 2c, eval = TRUE, echo = FALSE}
+
+model_c <- lm(mpg ~ hp + wt + drat, data = q2_data)
+
+VIF_matrix <- data.frame(vif(model_c))
+
+colnames(VIF_matrix) = "VIF"
+
+
+kable(VIF_matrix,
+      align = "c",
+      caption = "VIF by variable") %>%
+      kable_styling(position = "center") 
+
+```
+
+After removing `cyl` and `dist`, the VIF for all predictors are below 5. Table **Table 4: VIF by variable** displays the updaed VIFs for each remaining predictor.
+
+
+**Two D - AIC Feature Selection**
+
+```{r 2d, eval = TRUE, echo = FALSE}
+
+aic_back_2d = step(model_a, direction = "backward",trace = 0)
+model_d <- lm(formula = mpg ~ cyl + hp + wt, data = mtcars)
+
+aic_back_2d
+
+```
+
+Using AIC and backward selection, it can be shown that the best subset to consider for the model are `cyl`, `hp` and `wt`.
+
+
+**Two D - Model Selection**
+
+
+```{r 2e, eval=TRUE, echo= FALSE}
+
+c_r2 <- summary(model_c)$adj.r.squared
+d_r2 <- summary(model_d)$adj.r.squared
+
+c_vs_d <- data.frame(c("Model C","Model D"),c(c_r2,d_r2))
+
+colnames(c_vs_d) = c("Model","Adj R-Squared")
+rownames(c_vs_d) = c("C","D")
+
+kable(c_vs_d,
+      align = rep("c",2),
+      caption = "Model Selection") %>%
+    kable_styling(position = "center") %>%
+    row_spec(2, bold = "T", background = "#F7FBFF")
+
+```
+
+Comparing the following models:
+
+**Model C**: `mpg` ~ `hp` + `wt` + `drat `
+**Model D**: `mpg` ~ `cyl` + `hp` + `wt`
+
+table **Table 5: Model Selection** shows that the better model, using adj r-squared as the criteria, is model D.  This is supported by a larger r squared value.
+
+
+##Question 3
+
+**Three A - Best Model**
+
+```{r 3a, eval = TRUE, echo =FALSE}
+
+
+model_a <- lm(formula = mpg ~ wt, data = mtcars)
+model_b <- lm(formula = mpg ~ wt + qsec + am, data = mtcars)
+model_c <- lm(formula = mpg ~ qsec + am + hp + drat + disp + wt, data = mtcars)
+
+AIC(model_a, model_b, model_c)
+
+BIC(model_a, model_b, model_c)
+
+rsquare<- transpose(data.frame(summary(model_a)$adj.r.squared,summary(model_b)$adj.r.squared,summary(model_c)$adj.r.squared))
+colnames(rsquare) = "Adj R-Square"
+rownames(rsquare) = c("Model A", "Model B", "Model C")
+rsquare
+```
+
+
+From the 2 criteria to select the models from i.e AIC, BIC and adj. R squared, the best model is model B. Model B has the loweset AIC, BIC and nearly the same adj r-squared as C.  
+
+
+**Three B - Best Model Part II**
+
+```{r 3b, eval = TRUE, echo =FALSE}
+
+
+n = nrow(mtcars)
+rsme_a <- sqrt(sum((resid(model_a)/(1-hatvalues(model_a)))^2)/n)
+
+rsme_b <-sqrt(sum((resid(model_b)/(1-hatvalues(model_b)))^2)/n)
+
+rsme_c <-sqrt(sum((resid(model_c)/(1-hatvalues(model_c)))^2)/n)
+
+rsme_summ <- data.frame(c(rsme_a,rsme_b,rsme_c))
+
+colnames(rsme_summ) = "RSME LOOCV"
+rownames(rsme_summ) = c("Model A", "Model B", "Model C")
+
+kable(rsme_summ,
+      align = rep("c",1),
+      caption = "Model Selection") %>%
+    kable_styling(position = "center") %>%
+    row_spec(2, bold = "T", background = "#F7FBFF")
+
+
+```
+
+The table **Table 6: Model Selection** shows the RSME using LOOCV and shows that model B has the lowest cost function therefore it is the most appropriate model.
+
+**Three C - Compare RSME LOOCV to Rsquared**
+
+```{r 3c, eval = TRUE, echo =FALSE}
+
+
+n = nrow(mtcars)
+rs_a <- summary(model_a)$r.squared
+
+rs_b <-summary(model_b)$r.squared
+
+rs_c <-summary(model_c)$r.squared
+
+rs_summ <- data.frame(c(rs_a,rs_b,rs_c))
+
+colnames(rs_summ) = "R squared"
+rownames(rs_summ) = c("Model A", "Model B", "Model C")
+
+kable(rs_summ,
+      align = rep("c",1),
+      caption = "Model Selection") %>%
+    kable_styling(position = "center") %>%
+    row_spec(3, bold = "T", background = "#F7FBFF")
+
+
+```
+
+The table **Table 7:Model Selection** shows the Rsquared value and shows that model C has the greatest Rsquared value suggesting that it is the most appropriate model.  The rsquared value however, does not take into consideration the increased number of predictors.  If models are being compared of varying predictor totals then a measurement that considers the number of preditors should be considered.
+
+**Three D - 2 Fold CV**
+
+```{r 3d, eval = TRUE, echo =FALSE}
+
+
+set.seed (10)
+rand_index = sample(nrow(mtcars))
+mtcars2 = mtcars[rand_index,]
+
+
+k <- 2
+RMSE_a = RMSE_b = RMSE_c = numeric(k)
+folds <- cut(1:nrow(mtcars2),breaks=k,labels=FALSE)
+for(i in 1:k)
+{
+
+test_index = which(folds==i)
+
+test_data = mtcars2[test_index, ]
+training_data = mtcars2[-test_index, ]
+model_a <- lm(formula = mpg ~ wt, data = training_data)
+model_b <- lm(formula = mpg ~ qsec + am + wt, data = training_data)
+model_c <- lm(formula = mpg ~ qsec + am + hp + drat + disp + wt, data = training_data)
+
+resid_a = test_data[,1] - predict(model_a, newdata=test_data)
+RMSE_a[i] = sqrt(sum(resid_a^2)/nrow(test_data))
+resid_b = test_data[,1] - predict(model_b, newdata=test_data)
+RMSE_b[i] = sqrt(sum(resid_b^2)/nrow(test_data))
+resid_c = test_data[,1] - predict(model_c, newdata=test_data)
+RMSE_c[i] = sqrt(sum(resid_c^2)/nrow(test_data))
+}
+
+rmse_a <- mean(RMSE_a)
+rmse_b <- mean(RMSE_b)
+rmse_c <- mean(RMSE_c)
+
+rmse_summary <- transpose(data.frame(rmse_a,rmse_b,rmse_c))
+
+colnames(rmse_summary) = "RMSE"
+rownames(rmse_summary) = c("Model A", "Model B", "Model C")
+
+
+kable(rmse_summary,
+      align = rep("c",1),
+      caption = "Model Selection") %>%
+    kable_styling(position = "center") %>%
+    row_spec(2, bold = "T", background = "#F7FBFF")
+
+```
+
+The table **Table 8:Model Selection** shows the RSME value considering 2-fold cross validation shows that model B has the loweset average RSME value suggesting that it is the most appropriate model.  

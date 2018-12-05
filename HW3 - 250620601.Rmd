@@ -1,0 +1,410 @@
+---
+title: "HW3 - 250620601"
+author: "Ravin Lathigra"
+date: "November 2, 2018"
+output: pdf_document
+---
+
+<style>
+pre code, pre, code {
+  white-space: pre !important;
+  overflow-x: scroll !important;
+  word-break: keep-all !important;
+  word-wrap: initial !important;
+}
+</style>
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(width=100)
+```
+
+---
+
+##R Packages & Libraries
+```{r, eval=TRUE, echo = TRUE, warning = FALSE, message=FALSE}
+library(corrplot)    #Visualize Correlation between variables
+library(kableExtra)  #Style tables
+library(tidyverse)   #contains ggplot2,dplyr,tidyr, readr,purr,tibble,stringr,forcats
+library(formatR)     #Improve readability of code
+library(e1071)       #Functions for latent class analysis, Fourier transform ect.
+library(VIM)         #Knn
+library(ggfortify)   #Add on to ggplot2 to allow for more plot types
+library(Rtsne)       #Dimension reduction classification
+library(caret)       #streamlined model development
+library(RColorBrewer)#Control colours of visualizations 
+library(GGally)      #Contains ggpairs plots
+library(lmtest)
+```
+
+
+```{r read_data, eval = TRUE, echo= FALSE}
+set.seed(50)
+idx <- sample(32,25,replace=FALSE)
+
+mtcars2 <- mtcars[idx,]
+mtcars2$cyl <- as.factor(mtcars2$cyl)
+```
+
+## Question 1a
+
+```{r 1a, eval = TRUE, echo = FALSE, warning=FALSE}
+
+wt_mpg_lm <- lm(mpg~wt+cyl,
+                data = mtcars2)
+
+pred_val <- round(predict(wt_mpg_lm, newdata = data.frame(wt = 3, cyl = factor(6))),2)
+
+q1a_output <- data.frame(pred_val)
+
+colnames(q1a_output) = "Predicted Value"
+rownames(q1a_output) = "Question 1a"
+
+kable(q1a_output,
+      align = rep("c", ncol(q1a_output))) %>%
+  kable_styling()
+```
+
+If `weight` = 3 and `cylinder` = 6, the fitted value for `mpg` is **19.95**.
+
+## Question 1b
+
+```{r 1b, eval = TRUE, echo = FALSE, warning=FALSE}
+
+summary(wt_mpg_lm)
+
+```
+Considering a signficance level $$\alpha = 0.05$$ it can be shown that if `weight` is considered, `cylinder` **is an important** predictor as the p-value is less that 0.05.
+
+
+## Question 1c
+
+```{r 1c, eval = TRUE, echo = FALSE, warning=FALSE}
+
+wt_mpg_lm_int <- lm(mpg~wt+cyl+wt:cyl,
+                data = mtcars2)
+
+summary(wt_mpg_lm_int)
+
+pred_val2 <- round(predict(wt_mpg_lm_int, newdata = data.frame(wt = 3, cyl = factor(8))),2)
+
+q1c_output <- data.frame(pred_val2)
+
+colnames(q1c_output) = "Predicted Value"
+rownames(q1c_output) = "Question 1c"
+
+kable(q1c_output)
+
+```
+
+Considering `weight` and `cylinder` as predictors as well as their interaction, the fitted value assuming `weight` = 3 and `cylinder` = 8 is **17.1**
+
+
+## Question 1d
+
+```{r 1d, eval = TRUE, echo = FALSE, warning=FALSE}
+
+summary(wt_mpg_lm_int)
+
+```
+
+
+Considering the following Null and Alternative Hypothesis:
+
+*Null: There is no significant interaction effect between two predictors.*
+
+*Alt : There is a significant interaction effect between two predictors.*
+
+At a significance level of 0.05, there is no significant evidence that suggests the interaction between `weight` and `cylinder` aids in modelling shown by p-values greater than the significance level.
+
+
+## Question 2a
+
+```{r 2a, eval = TRUE, echo = FALSE, warning=FALSE, message=FALSE}
+
+
+data_q2 <- read_csv("https://raw.githubusercontent.com/hgweon2/mda9159a/master/hw3-data-1.csv")
+
+lm_2 <- lm(y ~ x1+x2+x3+x1:x2+x1:x3+x2:x3+x1:x2:x3, data=data_q2)
+
+#extract coefficients that include x1 as a predictor
+x1_coeffs <- lm_2$coefficients[c(2,5,6,8)]
+
+x_1 <-1
+x_2 <- 50
+x_3 <- 7
+
+unit_inc_x1 <- round(x1_coeffs[1]*x_1+x1_coeffs[2]*x_2*x_1+x1_coeffs[3]*x_3*x_1+x1_coeffs[4]*x_3*x_1*x_2,2)
+
+
+q2a_output <- data.frame(unit_inc_x1)
+
+colnames(q2a_output) = "Increase in mean"
+rownames(q2a_output) = "A"
+
+kable(q2a_output)
+
+```
+
+Table 1.0 shows that given `x2` = 50 and `x3` = 7, **one unit increase** in `x1` increases the estimated mean by 4 units i.e `A` = 4.
+
+
+## Question 2b
+
+```{r 2b, eval = TRUE, echo = FALSE, warning=FALSE}
+
+
+plot(lm_2, col= "dodgerblue", which= c(1,2,4))
+
+```
+
+The above plots display the following:
+
++ Resiudals vs Fitted Values
++ Normal qq plot
++ Cook's Distance 
+
+**Linear Model Appropriateness:**
+
+**Linearity** - Inspecting the plot "Residuals Vs Fitted" we see that the residuals are randomly scattered around the zero line indicating that a linear model may be an appropriate model.  Labeled on the plot are 3 observations with large observations that can be investigated if desired.
+
+**Equal Variance** - Inspecting the plot "Residuals Vs Fitted" we see that at any subset of the fitted values, there is a constant variance as there is no defining trends.  There is nothing to suuggest a linear model is not appropriate considering the variance of the residuals alone.
+
+**Normality assumption** - Inspecting the plot "Normal Q-Q" we that the standardized residuals closely correspond to the theoretical quantiles of a normal distribution suggesting that the residuals are approximately normally distributed.  The plot identifies 3 points that have the largest residuals.
+
+**Points of Interest** - Also included is a plot of Cook's distance which is a good indicator of point that may have high influence or require further investigation.
+
+Visualization suggests that a linear model is appropriate.
+
+## Question 2c
+
+```{r 2c, eval = TRUE, echo = FALSE, warning=FALSE}
+
+
+# bptest
+# equal variance holds
+bptest(lm_2) 
+
+# Shapiro test
+# Normal assumption HOLDS
+shapiro.test(resid(lm_2))
+
+```
+
+To assess if equal variance assumption holds, we use the **BP test** and to tests to see if the normal assumption holds we use the **Shapiro test**.  A significance level of 5% was used.
+
+BP Test: p-value > 5% **No evidence against equal variance**
+
+Shapiro Test: p-value > 5% **No evidence against normality**
+
+
+## Question 2d
+
+```{r 2d, eval = TRUE, echo = FALSE, warning=FALSE}
+
+
+summary(lm_2)
+
+     
+```
+
+Summary of the linear model with 3 way interaction shows that the 3 way interaction is insignificant.
+
+
+## Question 2e
+
+```{r 2e, eval = TRUE, echo = FALSE, warning=FALSE}
+
+
+reduced_model <- lm(y ~ x1+x2+x3, data=data_q2)
+
+anova(reduced_model, lm_2)
+```
+
+Considering the following null and alternative hypothesis and a 5% significance level
+
+*Null : B4 = B5 = B6 = B7 = 0*
+
+*Alt  : At least one of B4,B5,B6,B7 is non-zero.*
+
+Using anova to assess the importance of the interaction terms (B4:B7) shows support against the null hypothesis.
+
+
+## Question 3
+
+```{r 3, eval = TRUE, echo = FALSE, warning=FALSE, message=FALSE}
+
+
+q3_data <-  read_csv("https://raw.githubusercontent.com/hgweon2/mda9159a/master/hw3-data-2.csv")
+
+lm3 <- lm(y~x, data= q3_data)
+
+plot(lm3, col= "dodgerblue",which= c(1,2,4))
+
+# bptest
+# equal variance holds
+bptest(lm3) 
+
+# Shapiro test
+# Normal assumption HOLDS
+shapiro.test(resid(lm3))
+
+
+```
+
+The above plots display the following:
+
++ Resiudals vs Fitted Values
++ Normal qq plot
++ Cook's Distance 
+
+**Linear Model Appropriateness:**
+
+**Linearity** - Inspecting the plot "Residuals Vs Fitted" has a trend line that helps illustrate that there is a slight parabolic relationship between fitted values and residuals. Furthermore, the residuals do not exhibit zero mean suggesting that a linear model may not be the most appropriate model and perhaps transformations should be considered. 
+
+**Equal Variance** - Inspecting the plot "Residuals Vs Fitted" we see that at any subset of the fitted values, there is a constant variance. 
+
+**Normality assumption** - Inspecting the plot "Normal Q-Q" we that the standardized residuals moderately correspond to the theoretical quantiles of a normal distribution.  To properly assess if the normality assumption is violated the Shapiro test will be carried out.  Additionally, the plot identifies 3 points that have the largest residuals.
+
+**Points of Interest** - Also included is a plot of Cook's distance which is a good indicator of point that may high influence or require further investigation.  
+
+
+**BP Test**:  p-value > 5% significance level this suggests that the equal variance assumptions holds for this model.
+
+
+**Shapiro Test**:  p-value > 5% significance level this suggests that the equal variance assumptions holds for this model, though it could be argued that there is margnial support that it is violated as the p-value is quite low.
+
+## Question 4
+
+```{r 4, eval = TRUE, echo = FALSE, warning=FALSE, message=FALSE}
+
+
+q4_data <-  read_csv("https://raw.githubusercontent.com/hgweon2/mda9159a/master/hw3-data-3.csv")
+
+lm4 <- lm(y~x, data= q4_data)
+
+plot(lm4, col= "dodgerblue",which= c(1,2,4))
+
+# bptest
+# equal variance holds
+bptest(lm4) 
+
+# Shapiro test
+# Normal assumption HOLDS
+shapiro.test(resid(lm4))
+
+
+```
+
+The above plots display the following:
+
++ Resiudals vs Fitted Values
++ Normal qq plot
++ Cook's Distance 
+
+**Linear Model Appropriateness:**
+
+**Linearity** - Inspecting the plot "Residuals Vs Fitted" has residuals seemingly randomly distributed about the zero line suggesting that the linearity assumption holds. 
+
+**Equal Variance** - Inspecting the plot "Residuals Vs Fitted" we see that at any subset of the fitted values, there is **not constant** variance. Residuals seem to diverge as the fitted values increase perhaps indicative of heteroskedasitiy 
+
+**Normality assumption** - Inspecting the plot "Normal Q-Q" we that the standardized residuals closely correspond to the theoretical quantiles at points particularly the middle however there is indication at end points that show normality may be violated.  To properly assess if the normality assumption is violated the Shapiro test will be carried out.  Additionally, the plot identifies 3 points that have the largest residuals.
+
+**Points of Interest** - Also included is a plot of Cook's distance which is a good indicator of point that may have influence or require further investigation.
+
+
+**BP Test**:  p-value < 5% significance level this suggests that the equal variance assumptions is violated.
+
+
+**Shapiro Test**:  p-value < 5% significance level this suggests that the normality assumption is violated.
+
+
+## Question 5a
+
+```{r 5a, eval = TRUE, echo = FALSE, warning=FALSE}
+
+
+q5_data <- data.frame(ID = LETTERS[seq(1:10)],
+                      x = c(25,23,5,20,35,18,17,15,14,20),
+                      y = c(85,120,20,64,50,84,50,26,36,60),
+                      diag_h =c(0.16, 0.13, 0.47, 0.10, 0.55, 0.10, 0.11, 0.13, 0.15, 0.10),
+                      resid.lm = c(14.49, 53.29, -12.55, 2.98, -39.49, 26.78, -5.32 ,-25.53, -13.63, -1.02))
+                    
+
+lm_5 <- lm(y~x, data= q5_data)
+  
+X <- cbind(rep(1, nrow(q5_data)), q5_data$x)
+H <- X %*% solve(t(X) %*% X) %*% t(X)
+
+H_diag <- round(diag(H),2)
+
+high_leverage <- H_diag>2*2/nrow(q5_data)
+
+high_lev_points<- data.frame((q5_data[high_leverage,1]))
+colnames(high_lev_points) = "Points with high leverage"
+
+kable(high_lev_points)
+      #caption = "Question 5a",
+     # align= rep("c",ncol(high_lev_points))) %>%
+      #kable_styling()
+
+
+```
+
+The table above shows which observations have high leverage.  Points **C** and **E** exceed 2*p/n (0.4) therefore are considered to have high leverage.
+
+## Question 5b
+
+If Yb change to 50 the leverage of the observation would be unchanged as it is calculated independently of the response.
+
+## Question 5c
+
+```{r 5c, eval = TRUE, echo = FALSE, warning=FALSE}
+
+sigma_hat <- (sum(q5_data$resid.lm^2)/(nrow(q5_data)-2))^.5
+
+q5c <- q5_data %>%
+  mutate(`Standardized Residual` = `resid.lm`/(sigma_hat*((1-diag_h)^.5))) %>%
+  filter(ID == "B"|ID == "C"|ID == "E")
+
+
+kable(q5c)
+     # caption = "Quesiton 5c",
+     # align= rep("c",ncol(q5c))) %>%
+    #kable_styling()  %>%
+    #column_spec(6, bold = "T")
+ 
+```
+
+To calculate the standardize residuals we do the following: $$r_{i} = \dfrac{e_{i}}{\sqrt{(1-h_{ii})\hat{\sigma}^2}}$$.  Note, we use sigma hat as the true variance is unknow so it needs to be estimated. $$\hat{\sigma}^2 = \dfrac{e}{n-p}$$.  The table above shows the calculated Standardized Residuals for points **B**, **C**, and **E**.
+
+
+
+## Question 5d
+
+```{r 5d, eval = TRUE, echo = FALSE, warning=FALSE}
+
+
+q5d <- q5c %>%
+        mutate(`Cooks Distance` = `Standardized Residual`^2 * diag_h/((1-diag_h)*2))
+
+  
+
+kable(q5d)
+ 
+```
+
+To calculate the Cooks Distance we do the following: $$Cooks Distance = \dfrac{resid_{std}^2(h_{ii})}{p(1-h_{ii})}$$.  The table above shows the calculated Cooks Distances for points **B**, **C**, and **E**.
+
+Point *E* exceeds the criteria of 4/n (.4) therefore it is a point of high influence.
+## Question 6
+
+
+**Question A** - Point *B* is the observation furthest from the regression line therefore it has the largest absolute residual.
+
+**Question B** - Point *E* is the observation that has the largest leverage because it is the furthest difference from the mean of x.
+
+**Question C** - Point *D* is the observation that has the potential to have the largest influence because it has high leverage and moderately large absolute residual.
+
+
